@@ -1,0 +1,45 @@
+# This file defines charm config options, and populates the Configure tab on Charmhub.
+# If your charm does not require configuration options, delete this file entirely.
+#
+# See https://juju.is/docs/config for guidance.
+
+options:
+  collection_path:
+    type: string
+    default: "/var/snap/inventory-collector/common/output/"
+    description: |
+      The path where the data should be collected. This can be added to a machine
+      where there is a pre-defined storage for the output. Make sure there are
+      permissions to write in that path.
+  customer:
+    type: string
+    default: ""
+    description: |
+      REQUIRED. Name of the customer to whom the cloud belongs.
+  site:
+    type: string
+    default: ""
+    description: |
+      REQUIRED. Arbitrary name of the site from which the data is .
+  juju_endpoint:
+    type: string
+    default: ""
+    description: |
+      REQUIRED. IP and port of juju controller from which data is collected.
+      Example: "10.0.0.1:17070"
+  juju_username:
+    type: string
+    default: ""
+    description: |
+      REQUIRED. Username for login into the juju controller.
+  juju_password:
+    type: string
+    default: ""
+    description: |
+      REQUIRED. Password for login into the juju controller.
+  juju_ca_cert:
+    type: string
+    default: ""
+    description: |
+      REQUIRED. Base64 encoded string containing CA certificate used by the
+      juju controller.

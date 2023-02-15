@@ -1,0 +1,22 @@
+# This file populates the Overview on Charmhub.
+# See https://juju.is/docs/sdk/metadata-reference for a checklist and guidance.
+
+name: charm-inventory-collector
+display-name: Inventory Collector
+
+summary: Charm that deploys Inventory Collector snap
+
+description: |
+  >> TODO <<
+
+requires:
+  inventory-exporter:
+    interface: inventory-exporter
+
+resources:
+  # An OCI image resource for each container listed above.
+  # You may remove this if your charm will run without a workload sidecar container.
+  collector-snap:
+    type: file
+    filename: inventory-collector.snap
+    description: Snap implementing Inventory collector (Optional)
