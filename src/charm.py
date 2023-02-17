@@ -17,7 +17,7 @@ import os
 import subprocess
 
 from base64 import b64decode
-from typing import Optional, List
+from typing import Optional, Union
 
 import yaml
 from ops.charm import CharmBase, InstallEvent, ConfigChangedEvent, RelationEvent, ActionEvent
@@ -37,17 +37,17 @@ class CharmInventoryCollectorCharm(CharmBase):
     COLLECTOR_SNAP = "software-inventory-collector"
     CONFIG_PATH = f"/var/snap/{COLLECTOR_SNAP}/current/collector.yaml"
 
-    def __init__(self, *args):
+    def __init__(self, *args) -> None:
         super().__init__(*args)
         self._snap_path: Optional[str] = None
         self._is_snap_path_cached = False
 
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.config_changed, self._reconfigure_snap)
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.upgrade_charm, self._on_install)
         self.framework.observe(self.on.collect_action, self._on_collect_action)
-        self.framework.observe(self.on.inventory_exporter_relation_changed, self._on_inventory_exporter_relation_changed)
-        self.framework.observe(self.on.inventory_exporter_relation_departed, self._on_inventory_exporter_relation_changed)
+        self.framework.observe(self.on.inventory_exporter_relation_changed, self._reconfigure_snap)
+        self.framework.observe(self.on.inventory_exporter_relation_departed, self._reconfigure_snap)
 
     @property
     def snap_path(self) -> Optional[str]:
@@ -100,6 +100,10 @@ class CharmInventoryCollectorCharm(CharmBase):
         return success
 
     def _on_install(self, _: InstallEvent) -> None:
+        """Trigger snap installation.
+
+        If 'collector-snap' resource is attached to the charm,
+        """
         if self.snap_path:
             snap.install_local(self.snap_path, dangerous=True)
         else:
@@ -107,22 +111,17 @@ class CharmInventoryCollectorCharm(CharmBase):
 
         self.assess_status()
 
-    def _on_config_changed(self, _: ConfigChangedEvent) -> None:
-        """Handle changed configuration.
+    def _reconfigure_snap(self, _: Union[RelationEvent, ConfigChangedEvent]) -> None:
+        """Trigger snap reconfiguration."""
+        self.render_config()
+        self.assess_status()
 
-        Change this example to suit your needs. If you don't need to handle config, you can remove
-        this method.
+    def render_config(self) -> None:
+        """Generate snap configuration.
 
-        Learn more about config at https://juju.is/docs/sdk/config
+        Sources for the configuration are charm config options and data from relation
+        with exporter charms.
         """
-        self.render_config()
-        self.assess_status()
-
-    def _on_inventory_exporter_relation_changed(self, _: RelationEvent):
-        self.render_config()
-        self.assess_status()
-
-    def render_config(self):
         config = {
             "settings": {},
             "juju_controller": {},
@@ -157,7 +156,8 @@ class CharmInventoryCollectorCharm(CharmBase):
         with open(self.CONFIG_PATH, "w", encoding="UTF-8") as conf_file:
             yaml.safe_dump(config, conf_file)
 
-    def assess_status(self):
+    def assess_status(self) -> None:
+        """Perform overall charm status assessment."""
         collector_ok = self.run_collector(dry_run=True)
         if collector_ok:
             self.unit.status = ActiveStatus("Unit ready.")
