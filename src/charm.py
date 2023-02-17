@@ -19,7 +19,7 @@ from base64 import b64decode
 from typing import Optional
 
 import yaml
-from ops.charm import CharmBase, InstallEvent, ConfigChangedEvent, RelationChangedEvent
+from ops.charm import CharmBase, InstallEvent, ConfigChangedEvent, RelationEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus, ModelError
 
@@ -33,7 +33,7 @@ VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 class CharmInventoryCollectorCharm(CharmBase):
     """Charm the service."""
 
-    COLLECTOR_SNAP = "inventory-collector"
+    COLLECTOR_SNAP = "software-inventory-collector"
     CONFIG_PATH = f"/var/snap/{COLLECTOR_SNAP}/current/collector.yaml"
 
     def __init__(self, *args):
@@ -44,6 +44,7 @@ class CharmInventoryCollectorCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.inventory_exporter_relation_changed, self._on_inventory_exporter_relation_changed)
+        self.framework.observe(self.on.inventory_exporter_relation_departed, self._on_inventory_exporter_relation_changed)
 
     @property
     def snap_path(self) -> Optional[str]:
@@ -85,24 +86,20 @@ class CharmInventoryCollectorCharm(CharmBase):
         self.render_config()
         self.assess_status()
 
-    def _on_inventory_exporter_relation_changed(self, _: RelationChangedEvent):
+    def _on_inventory_exporter_relation_changed(self, _: RelationEvent):
         self.render_config()
         self.assess_status()
 
     def render_config(self):
-        try:
-            with open(self.CONFIG_PATH, "r", encoding="UTF-8") as conf_file:
-                config: dict = yaml.safe_load(conf_file)
-        except FileNotFoundError:
-            config = {}
+        config = {
+            "settings": {},
+            "juju_controller": {},
+            "targets": [],
+        }
 
         customer = self.config.get("customer")
         site = self.config.get("site")
         ca_cert = b64decode(self.config.get("juju_ca_cert")).decode("UTF-8")
-
-        config.setdefault("settings", {})
-        config.setdefault("juju_controller", {})
-        config.setdefault("targets", [])
 
         config["settings"]["collection_path"] = self.config.get("collection_path")
         config["settings"]["customer"] = customer
@@ -113,16 +110,17 @@ class CharmInventoryCollectorCharm(CharmBase):
         config["juju_controller"]["ca_cert"] = ca_cert
 
         for relation in self.model.relations.get("inventory-exporter"):
-            print(relation.data)
-            config["targets"].append({
-                "ip": relation.data.get("private-address"),
-                "port": relation.data.get("port"),
-                "hostname": relation.data.get("hostname"),
-                "customer": customer,
-                "site": site,
-                "model": relation.data.get("model")
-            }
-            )
+            for unit in relation.units:
+                remote_data = relation.data[unit]
+                endpoint = f"{remote_data.get('private-address')}:{remote_data.get('port')}"
+                config["targets"].append({
+                    "endpoint": endpoint,
+                    "hostname": remote_data.get("hostname"),
+                    "customer": customer,
+                    "site": site,
+                    "model": remote_data.get("model"),
+                }
+                )
 
         with open(self.CONFIG_PATH, "w", encoding="UTF-8") as conf_file:
             yaml.safe_dump(config, conf_file)
