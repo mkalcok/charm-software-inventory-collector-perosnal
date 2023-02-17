@@ -14,12 +14,13 @@ https://discourse.charmhub.io/t/4208
 
 import logging
 import os
+import subprocess
 
 from base64 import b64decode
-from typing import Optional
+from typing import Optional, List
 
 import yaml
-from ops.charm import CharmBase, InstallEvent, ConfigChangedEvent, RelationEvent
+from ops.charm import CharmBase, InstallEvent, ConfigChangedEvent, RelationEvent, ActionEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus, ModelError
 
@@ -43,6 +44,8 @@ class CharmInventoryCollectorCharm(CharmBase):
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.upgrade_charm, self._on_install)
+        self.framework.observe(self.on.collect_action, self._on_collect_action)
         self.framework.observe(self.on.inventory_exporter_relation_changed, self._on_inventory_exporter_relation_changed)
         self.framework.observe(self.on.inventory_exporter_relation_departed, self._on_inventory_exporter_relation_changed)
 
@@ -66,6 +69,35 @@ class CharmInventoryCollectorCharm(CharmBase):
                 self._is_snap_path_cached = True
 
         return self._snap_path
+
+    def run_collector(self, dry_run: bool = False) -> bool:
+        """Execute collector command.
+
+        Any output from the command will be logged.
+
+        If dry_run is True, the command will only verify valid config and ability
+        to connect to data sources without actually collecting data.
+
+        :param dry_run: Should the collector be executed in "dry run" mode.
+        :return: True if command executed successfully, otherwise False.
+        """
+        cmd = [self.COLLECTOR_SNAP, "-c", self.CONFIG_PATH]
+        if dry_run:
+            cmd.append("--dry-run")
+
+        cmd_string = " ".join(cmd)
+        try:
+            result = subprocess.check_output(cmd)
+        except subprocess.CalledProcessError as exc:
+            logger.error(f"Execution of '{cmd_string}' failed: {exc.output}")
+            success = False
+        else:
+            logger.debug(
+                f"Execution of '{cmd_string}' successful: {result.decode('UTF-8')}"
+            )
+            success = True
+
+        return success
 
     def _on_install(self, _: InstallEvent) -> None:
         if self.snap_path:
@@ -126,7 +158,21 @@ class CharmInventoryCollectorCharm(CharmBase):
             yaml.safe_dump(config, conf_file)
 
     def assess_status(self):
-        self.unit.status = ActiveStatus("Unit ready.")
+        collector_ok = self.run_collector(dry_run=True)
+        if collector_ok:
+            self.unit.status = ActiveStatus("Unit ready.")
+        else:
+            self.unit.status = BlockedStatus(
+                "Collector is unable to run. Please see logs."
+            )
+
+    def _on_collect_action(self, action: ActionEvent) -> None:
+        """Execute data collection from juju controller and related exporters."""
+        collection_success = self.run_collector()
+        if collection_success:
+            action.set_results({"result": "Collection completed."})
+        else:
+            action.fail("Collection failed. See logs for more info.")
 
 
 if __name__ == "__main__":  # pragma: nocover

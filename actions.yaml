@@ -1,0 +1,2 @@
+collect:
+  description: Collect data from Juju controller and related exporters.
