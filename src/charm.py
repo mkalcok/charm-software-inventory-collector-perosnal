@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
 
-class CharmInventoryCollectorCharm(CharmBase):
+class CharmSoftwareInventoryCollectorCharm(CharmBase):
     """Charm the service."""
 
     COLLECTOR_SNAP = "software-inventory-collector"
@@ -176,4 +176,4 @@ class CharmInventoryCollectorCharm(CharmBase):
 
 
 if __name__ == "__main__":  # pragma: nocover
-    main(CharmInventoryCollectorCharm)
+    main(CharmSoftwareInventoryCollectorCharm)

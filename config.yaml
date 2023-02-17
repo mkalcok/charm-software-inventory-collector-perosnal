@@ -6,7 +6,7 @@
 options:
   collection_path:
     type: string
-    default: "/var/snap/inventory-collector/common/output/"
+    default: "/var/snap/software-inventory-collector/common/output/"
     description: |
       The path where the data should be collected. This can be added to a machine
       where there is a pre-defined storage for the output. Make sure there are
